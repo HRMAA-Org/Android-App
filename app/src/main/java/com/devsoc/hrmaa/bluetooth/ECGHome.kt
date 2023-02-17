@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.os.EnvironmentCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.lifecycleScope
 import com.chaquo.python.PyException
@@ -47,6 +48,7 @@ class ECGHome : AppCompatActivity() {
     var timeStampList = mutableListOf<Long>()
     lateinit var py : Python
     lateinit var module : PyObject
+    var rec = true
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,24 +95,30 @@ class ECGHome : AppCompatActivity() {
 
         binding.btnReconnect.setOnClickListener {
             lifecycleScope.launch(Dispatchers.IO) {
-                //code for client
-                if(apnaServerSocket != null){
-                    apnaServerSocket!!.close()
-                }
-                apnaSocket?.close()
-                bluetoothAdapter?.cancelDiscovery()
-                btDevice?.let {
-                    apnaSocket = it.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
-                    try {
-                        apnaSocket?.connect()
-                        Log.d("Log", apnaSocket.toString())
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(this@ECGHome,"Connected to ${apnaSocket?.remoteDevice?.name} \n ${apnaSocket.toString()}",Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    catch(e: IOException) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(this@ECGHome, e.message, Toast.LENGTH_SHORT).show()
+
+                if( btDevice != null && apnaSocket != null) {
+                    if( apnaSocket!!.isConnected()) {
+                        btDevice?.let {
+                            if (!apnaSocket!!.isConnected()) {
+                                apnaSocket =
+                                    it.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
+                                try {
+                                    apnaSocket?.connect()
+                                    Log.d("Log", apnaSocket.toString())
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(
+                                            this@ECGHome,
+                                            "Connected to ${apnaSocket?.remoteDevice?.name} \n ${apnaSocket.toString()}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                } catch (e: IOException) {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(this@ECGHome, e.message, Toast.LENGTH_SHORT)
+                                            .show()
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -140,9 +148,7 @@ class ECGHome : AppCompatActivity() {
                             timeStampList.add(compositeData / 10000)
                         }
                     }
-                    catch(e: java.lang.NumberFormatException){
-
-                    }
+                    catch(e: java.lang.NumberFormatException){}
                     catch (e: IOException) {
                         Log.d(TAG, "Input stream was disconnected", e)
                         withContext(Dispatchers.Main){
@@ -150,73 +156,23 @@ class ECGHome : AppCompatActivity() {
                         }
                         break
                     }
-
-                    if( (System.currentTimeMillis() - beforeLoopTime) > 20000 ){
-                        Log.d("HeartList",ECGDataList.toString())
-                        Log.d("TimeList",timeStampList.toString())
-
-                        try {
-
-                            withContext(Dispatchers.Main) {
-                                val dataList = module.callAttr(
-                                    "get_bpm_metric",
-                                    ECGDataList.toIntArray(),
-                                    timeStampList.toLongArray()
-                                ).asList()
-                                binding.tvHeartRate.text = dataList.get(0).toString()
-                                Log.d("Contents of List", dataList.toString())
-                                ECGDataList.clear()
-                                timeStampList.clear()
-                            }
-                        }
-                        catch(e: PyException){
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(this@ECGHome, e.message, Toast.LENGTH_SHORT).show()
-                                Log.e("Error in python script",e.message + "\n" + e.cause + "\n" + e.toString())
-                            }
-                        }
-                        finally {
-                            beforeLoopTime = System.currentTimeMillis()
-                        }
-
+                    if( !rec){
+                        Log.d(TAG, ECGDataList.toString())
+                        Log.d(TAG, timeStampList.toString())
+                        break
                     }
+
                 }
             }
         }
 
         binding.btnPauseResume.setOnClickListener {
-            inStream =apnaSocket?.inputStream
-            outStream=apnaSocket?.outputStream
-
-            try{
-                outStream?.write(1)
-            }
-            catch (e: IOException) {
-                Log.e(TAG, "Error occurred when sending data", e)
+            rec = !rec
+            if( rec){
+                binding.btnReconnect.performClick()
             }
         }
     }
-
-    private val requestPermissionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.RequestMultiplePermissions()
-        )
-        {
-
-            if( (it[Manifest.permission.BLUETOOTH] == false
-                        &&
-                        (it[Manifest.permission.BLUETOOTH_CONNECT] == false
-                                || it[Manifest.permission.BLUETOOTH_ADVERTISE]==false
-                                ||it[Manifest.permission.BLUETOOTH_SCAN]==false))
-                || (it[Manifest.permission.ACCESS_COARSE_LOCATION] ==false && it[Manifest.permission.ACCESS_FINE_LOCATION] ==false)){
-                Toast.makeText(this,"Please provide required permissions", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-            else{
-                Toast.makeText(this,"Permissions granted successfully", Toast.LENGTH_SHORT).show()
-                bluetoothAdapter?.enable()
-            }
-        }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
 
@@ -267,7 +223,6 @@ class ECGHome : AppCompatActivity() {
                 }
 
                 val reader = BufferedReader(InputStreamReader(inStream))
-
                 var beforeLoopTime = System.currentTimeMillis()
                 while (true) {
                     try{
@@ -278,9 +233,7 @@ class ECGHome : AppCompatActivity() {
                             timeStampList.add(compositeData / 10000)
                         }
                     }
-                    catch(e: java.lang.NumberFormatException){
-
-                    }
+                    catch(e: java.lang.NumberFormatException){}
                     catch (e: IOException) {
                         Log.d(TAG, "Input stream was disconnected", e)
                         withContext(Dispatchers.Main){
@@ -288,36 +241,14 @@ class ECGHome : AppCompatActivity() {
                         }
                         break
                     }
-
-                    if( (System.currentTimeMillis() - beforeLoopTime) > 20000 ){
-                        Log.d("HeartList",ECGDataList.toString())
-                        Log.d("TimeList",timeStampList.toString())
-
-                        try {
-
-                            withContext(Dispatchers.Main) {
-                                val dataList = module.callAttr(
-                                    "get_bpm_metric",
-                                    ECGDataList.toIntArray(),
-                                    timeStampList.toLongArray()
-                                ).asList()
-                                binding.tvHeartRate.text = dataList.get(0).toString()
-                                Log.d("Contents of List", dataList.toString())
-                                ECGDataList.clear()
-                                timeStampList.clear()
-                            }
-                        }
-                        catch(e: PyException){
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(this@ECGHome, e.message, Toast.LENGTH_SHORT).show()
-                                Log.e("Error in python script",e.message + "\n" + e.cause + "\n" + e.toString())
-                            }
-                        }
-                        finally {
-                            beforeLoopTime = System.currentTimeMillis()
-                        }
-
+                    if( !rec){
+                        Log.d(TAG, ECGDataList.toString())
+                        Log.d(TAG, timeStampList.toString())
+                        ECGDataList.clear()
+                        timeStampList.clear()
+                        break
                     }
+
                 }
             }
             if( btDevice == null){
@@ -337,4 +268,54 @@ class ECGHome : AppCompatActivity() {
         bluetoothAdapter?.cancelDiscovery()
         bluetoothAdapter?.disable()
     }
+
+    suspend fun clientConnect(): Unit{
+        if( btDevice != null && apnaSocket != null) {
+            if( apnaSocket!!.isConnected()) {
+                btDevice?.let {
+                    if (!apnaSocket!!.isConnected()) {
+                        apnaSocket =
+                            it.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
+                        try {
+                            apnaSocket?.connect()
+                            Log.d("Log", apnaSocket.toString())
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(
+                                    this@ECGHome,
+                                    "Connected to ${apnaSocket?.remoteDevice?.name} \n ${apnaSocket.toString()}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } catch (e: IOException) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@ECGHome, e.message, Toast.LENGTH_SHORT)
+                                    .show()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private val requestPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        )
+        {
+
+            if( (it[Manifest.permission.BLUETOOTH] == false
+                        &&
+                        (it[Manifest.permission.BLUETOOTH_CONNECT] == false
+                                || it[Manifest.permission.BLUETOOTH_ADVERTISE]==false
+                                ||it[Manifest.permission.BLUETOOTH_SCAN]==false))
+                || (it[Manifest.permission.ACCESS_COARSE_LOCATION] ==false && it[Manifest.permission.ACCESS_FINE_LOCATION] ==false)){
+                Toast.makeText(this,"Please provide required permissions", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+            else{
+                Toast.makeText(this,"Permissions granted successfully", Toast.LENGTH_SHORT).show()
+                bluetoothAdapter?.enable()
+            }
+        }
 }
