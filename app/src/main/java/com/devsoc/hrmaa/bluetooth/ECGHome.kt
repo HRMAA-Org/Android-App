@@ -6,13 +6,12 @@ import android.bluetooth.*
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.os.EnvironmentCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.lifecycleScope
-import com.chaquo.python.PyException
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
@@ -42,28 +41,14 @@ class ECGHome : AppCompatActivity() {
     val SELECT_DEVICE = 0
     val TAG ="Tag1"
     var currStr=""
-    var heartRateStr = ""
-    var timeStr = ""
     var ECGDataList = mutableListOf<Int>()
     var timeStampList = mutableListOf<Long>()
-    lateinit var py : Python
-    lateinit var module : PyObject
     var rec = true
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding= DataBindingUtil.setContentView(this,R.layout.activity_ecghome)
-
-        //setting up chaquopy
-        lifecycleScope.launch(Dispatchers.Default) {
-            if (!Python.isStarted()) {
-                Python.start(AndroidPlatform(this@ECGHome))
-            }
-            py = Python.getInstance()
-            module = py.getModule("heartdata_to_heartrate")
-            Log.d(TAG,"python set up")
-        }
 
         //       asking for permissions
         requestPermissionLauncher.launch(
@@ -75,6 +60,8 @@ class ECGHome : AppCompatActivity() {
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_ADVERTISE,
                 Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                Manifest.permission.READ_EXTERNAL_STORAGE
             )
         )
 
@@ -157,8 +144,32 @@ class ECGHome : AppCompatActivity() {
                         break
                     }
                     if( !rec){
-                        Log.d(TAG, ECGDataList.toString())
-                        Log.d(TAG, timeStampList.toString())
+                        try {
+                            //file storage snippet
+                            lifecycleScope.launch(Dispatchers.Default) {
+                                val ecgData = ECGDataList.toString()
+                                val times = timeStampList.toString()
+                                val data = "$ecgData \n \n $times"
+                                val folder =
+                                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                                val file = File(folder, "ecg_log.txt")
+                                val fos = FileOutputStream(file)
+                                fos.write(data.toByteArray())
+
+                                runOnUiThread {
+                                    Toast.makeText(
+                                        this@ECGHome,
+                                        "CSV File saved successfully at $folder",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                        catch(e: Exception){
+                            lifecycleScope.launch {
+                                Toast.makeText(this@ECGHome,"Unable to export file", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                         break
                     }
 
@@ -228,9 +239,19 @@ class ECGHome : AppCompatActivity() {
                     try{
                         currStr = reader.readLine()
                         withContext(Dispatchers.Main) {
-                            val compositeData = currStr.toLong()
-                            ECGDataList.add((compositeData % 10000).toInt())
-                            timeStampList.add(compositeData / 10000)
+                            val idxComma = currStr.indexOf(',')
+                            val timeStr:String = try{
+                                currStr.substring( IntRange(0, idxComma -1)  )
+                            } catch (e : StringIndexOutOfBoundsException){
+                                "-1"
+                            }
+                            val hrStr:String = try {
+                                currStr.substring(IntRange(idxComma + 1, currStr.length - 1))
+                            } catch (e : java.lang.Exception){
+                                "-1"
+                            }
+                            ECGDataList.add( hrStr.toInt() )
+                            timeStampList.add( timeStr.toLong())
                         }
                     }
                     catch(e: java.lang.NumberFormatException){}
@@ -242,10 +263,32 @@ class ECGHome : AppCompatActivity() {
                         break
                     }
                     if( !rec){
-                        Log.d(TAG, ECGDataList.toString())
-                        Log.d(TAG, timeStampList.toString())
-                        ECGDataList.clear()
-                        timeStampList.clear()
+                        try {
+                            //file storage snippet
+                            lifecycleScope.launch(Dispatchers.Default) {
+                                val ecgData = ECGDataList.toString()
+                                val times = timeStampList.toString()
+                                val data = "$ecgData \n \n $times"
+                                val folder =
+                                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                                val file = File(folder, "ecg_log.txt")
+                                val fos = FileOutputStream(file)
+                                fos.write(data.toByteArray())
+
+                                runOnUiThread {
+                                    Toast.makeText(
+                                        this@ECGHome,
+                                        "CSV File saved successfully at $folder",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                        catch(e: Exception){
+                            lifecycleScope.launch {
+                                Toast.makeText(this@ECGHome,"Unable to export file", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                         break
                     }
 
