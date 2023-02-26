@@ -19,17 +19,17 @@ import com.devsoc.hrmaa.R
 import com.devsoc.hrmaa.databinding.ActivityEcghomeBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.*
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.CopyOnWriteArrayList
 
 @SuppressLint("MissingPermission")
 class ECGHome : AppCompatActivity() {
 
     private lateinit var binding: ActivityEcghomeBinding
-    var mSocket: BluetoothSocket? =null
-    var MY_UUID : UUID? = UUID.fromString("4cb4cec4-2017-4e54-9ef9-9e4aadaf033e")
     var apnaSocket : BluetoothSocket? = null
     var btDevice: BluetoothDevice? = null
     var apnaServerSocket : BluetoothServerSocket?= null
@@ -37,13 +37,12 @@ class ECGHome : AppCompatActivity() {
     var bluetoothAdapter: BluetoothAdapter? = null
     var inStream: InputStream? =null
     var outStream: OutputStream? = null
-    var buffer: ByteArray? = ByteArray(1024)
 
     val SELECT_DEVICE = 0
     val TAG ="Tag1"
     var currStr=""
-    var ECGDataList = mutableListOf<Int>()
-    var timeStampList = mutableListOf<Long>()
+    var ECGDataList = CopyOnWriteArrayList<Int>()
+    var timeStampList = CopyOnWriteArrayList<Long>()
     var rec = true
 
 
@@ -81,104 +80,6 @@ class ECGHome : AppCompatActivity() {
             startActivityForResult(intent, SELECT_DEVICE)
         }
 
-        binding.btnReconnect.setOnClickListener {
-            lifecycleScope.launch(Dispatchers.IO) {
-
-                if( btDevice != null && apnaSocket != null) {
-                    if( apnaSocket!!.isConnected()) {
-                        btDevice?.let {
-                            if (!apnaSocket!!.isConnected()) {
-                                apnaSocket =
-                                    it.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
-                                try {
-                                    apnaSocket?.connect()
-                                    Log.d("Log", apnaSocket.toString())
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(
-                                            this@ECGHome,
-                                            "Connected to ${apnaSocket?.remoteDevice?.name} \n ${apnaSocket.toString()}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                } catch (e: IOException) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(this@ECGHome, e.message, Toast.LENGTH_SHORT)
-                                            .show()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                inStream =apnaSocket?.inputStream
-                outStream=apnaSocket?.outputStream
-
-                try{
-                    outStream?.write(0)
-                    if(outStream==null){
-                        Log.d(TAG,"outStream is null")
-                    }
-                }
-                catch (e: IOException) {
-                    Log.e(TAG, "Error occurred when sending data", e)
-                }
-
-                val reader = BufferedReader(InputStreamReader(inStream))
-
-                var beforeLoopTime = System.currentTimeMillis()
-                while (true) {
-                    try{
-                        currStr = reader.readLine()
-                        withContext(Dispatchers.Main) {
-                            val compositeData = currStr.toLong()
-                            ECGDataList.add((compositeData % 10000).toInt())
-                            timeStampList.add(compositeData / 10000)
-                        }
-                    }
-                    catch(e: java.lang.NumberFormatException){}
-                    catch (e: IOException) {
-                        Log.d(TAG, "Input stream was disconnected", e)
-                        withContext(Dispatchers.Main){
-                            Toast.makeText(this@ECGHome,e.message, Toast.LENGTH_LONG).show()
-                        }
-                        break
-                    }
-                    if( !rec){
-                        try {
-                            //file storage snippet
-                            lifecycleScope.launch(Dispatchers.Default) {
-                                val ecgData = ECGDataList.toString()
-                                val times = timeStampList.toString()
-                                val data = "$ecgData \n \n $times"
-                                val folder =
-                                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                                val fileName = SimpleDateFormat("yyyy-MM-dd-HHmmss")
-                                    .format(System.currentTimeMillis()).plus(".txt")
-                                val file = File(folder, fileName)
-                                val fos = FileOutputStream(file)
-                                fos.write(data.toByteArray())
-
-                                runOnUiThread {
-                                    Toast.makeText(
-                                        this@ECGHome,
-                                        "CSV File saved successfully at $folder",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        }
-                        catch(e: Exception){
-                            lifecycleScope.launch {
-                                Toast.makeText(this@ECGHome,"Unable to export file", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                        break
-                    }
-
-                }
-            }
-        }
 
         binding.btnPauseResume.setOnClickListener {
             rec = !rec
@@ -238,6 +139,8 @@ class ECGHome : AppCompatActivity() {
 
                 val reader = BufferedReader(InputStreamReader(inStream))
                 var beforeLoopTime = System.currentTimeMillis()
+                var count = 0
+                rec = true
                 while (true) {
                     try{
                         currStr = reader.readLine()
@@ -265,38 +168,62 @@ class ECGHome : AppCompatActivity() {
                         }
                         break
                     }
-                    if( !rec){
+                    if(System.currentTimeMillis() - beforeLoopTime >= 60000){
+                        //don't put beforeLoopTime inside try catch block
+                        //don't fix it if it ain't broke
+                        beforeLoopTime = System.currentTimeMillis()
                         try {
                             //file storage snippet
                             lifecycleScope.launch(Dispatchers.Default) {
-                                val ecgData = ECGDataList.toString()
-                                val times = timeStampList.toString()
-                                val data = "$ecgData \n \n $times"
-                                val folder =
-                                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                                val fileName = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.US)
-                                    .format(System.currentTimeMillis()).plus(".txt")
-                                val file = File(folder, fileName)
-                                val fos = FileOutputStream(file)
-                                fos.write(data.toByteArray())
 
-                                runOnUiThread {
-                                    Toast.makeText(
-                                        this@ECGHome,
-                                        "CSV File saved successfully at $folder",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
+
+                                    val ecgData = ECGDataList.toString()
+                                    val times = timeStampList.toString()
+                                    val data = "$ecgData \n \n $times"
+                                    val folder =
+                                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                                    val fileName = SimpleDateFormat("yyyy-MM-dd-HHmmssSSS", Locale.US)
+                                        .format(System.currentTimeMillis()).plus(".txt")
+                                    val file = File(folder, fileName)
+                                    val fos = FileOutputStream(file)
+                                    fos.write(data.toByteArray())
+
+                                    runOnUiThread {
+                                        Toast.makeText(
+                                            this@ECGHome,
+                                            "CSV File saved successfully at $folder",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+
+                                    ECGDataList.clear()
+                                    timeStampList.clear()
+                                    count++
+
                             }
+
                         }
                         catch(e: Exception){
                             lifecycleScope.launch {
-                                Toast.makeText(this@ECGHome,"Unable to export file", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this@ECGHome,"Unable to export file, $e", Toast.LENGTH_SHORT).show()
                             }
                         }
+
+                    }
+                    if( count >= 5){
                         break
                     }
+                }
 
+                try{
+                    outStream?.write(0)
+                    if(outStream==null){
+                        Log.d(TAG,"outStream is null")
+                    } else {
+                    }
+                }
+                catch (e: IOException) {
+                    Log.e(TAG, "Error occurred when sending data", e)
                 }
             }
             if( btDevice == null){
@@ -317,34 +244,7 @@ class ECGHome : AppCompatActivity() {
         bluetoothAdapter?.disable()
     }
 
-    suspend fun clientConnect(): Unit{
-        if( btDevice != null && apnaSocket != null) {
-            if( apnaSocket!!.isConnected()) {
-                btDevice?.let {
-                    if (!apnaSocket!!.isConnected()) {
-                        apnaSocket =
-                            it.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
-                        try {
-                            apnaSocket?.connect()
-                            Log.d("Log", apnaSocket.toString())
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(
-                                    this@ECGHome,
-                                    "Connected to ${apnaSocket?.remoteDevice?.name} \n ${apnaSocket.toString()}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        } catch (e: IOException) {
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(this@ECGHome, e.message, Toast.LENGTH_SHORT)
-                                    .show()
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+
 
     private val requestPermissionLauncher =
         registerForActivityResult(
