@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.*
+import java.text.SimpleDateFormat
 import java.util.*
 
 @SuppressLint("MissingPermission")
@@ -152,7 +153,9 @@ class ECGHome : AppCompatActivity() {
                                 val data = "$ecgData \n \n $times"
                                 val folder =
                                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                                val file = File(folder, "ecg_log.txt")
+                                val fileName = SimpleDateFormat("yyyy-MM-dd-HHmmss")
+                                    .format(System.currentTimeMillis()).plus(".txt")
+                                val file = File(folder, fileName)
                                 val fos = FileOutputStream(file)
                                 fos.write(data.toByteArray())
 
@@ -271,7 +274,9 @@ class ECGHome : AppCompatActivity() {
                                 val data = "$ecgData \n \n $times"
                                 val folder =
                                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                                val file = File(folder, "ecg_log.txt")
+                                val fileName = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.US)
+                                    .format(System.currentTimeMillis()).plus(".txt")
+                                val file = File(folder, fileName)
                                 val fos = FileOutputStream(file)
                                 fos.write(data.toByteArray())
 
