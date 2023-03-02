@@ -30,17 +30,17 @@ import java.util.concurrent.CopyOnWriteArrayList
 class ECGHome : AppCompatActivity() {
 
     private lateinit var binding: ActivityEcghomeBinding
-    var apnaSocket : BluetoothSocket? = null
+    var apnaSocket: BluetoothSocket? = null
     var btDevice: BluetoothDevice? = null
-    var apnaServerSocket : BluetoothServerSocket?= null
+    var apnaServerSocket: BluetoothServerSocket? = null
 
     var bluetoothAdapter: BluetoothAdapter? = null
-    var inStream: InputStream? =null
+    var inStream: InputStream? = null
     var outStream: OutputStream? = null
 
     val SELECT_DEVICE = 0
-    val TAG ="Tag1"
-    var currStr=""
+    val TAG = "Tag1"
+    var currStr = ""
     var ECGDataList = CopyOnWriteArrayList<Int>()
     var timeStampList = CopyOnWriteArrayList<Long>()
     var rec = true
@@ -48,7 +48,7 @@ class ECGHome : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding= DataBindingUtil.setContentView(this,R.layout.activity_ecghome)
+        binding = DataBindingUtil.setContentView(this, R.layout.activity_ecghome)
 
         //       asking for permissions
         requestPermissionLauncher.launch(
@@ -83,7 +83,7 @@ class ECGHome : AppCompatActivity() {
 
         binding.btnPauseResume.setOnClickListener {
             rec = !rec
-            if( rec){
+            if (rec) {
                 binding.btnReconnect.performClick()
             }
         }
@@ -94,141 +94,143 @@ class ECGHome : AppCompatActivity() {
         if (requestCode == SELECT_DEVICE && resultCode == RESULT_OK) {
             val name = data?.getStringExtra("devName")
             val address = data!!.getStringExtra("devAddress")
-            btDevice= bluetoothAdapter?.getRemoteDevice(address)
-            if(btDevice ==null){
-                Toast.makeText(this,"btDevice is null",Toast.LENGTH_SHORT).show()
+            btDevice = bluetoothAdapter?.getRemoteDevice(address)
+            if (btDevice == null) {
+                Toast.makeText(this, "btDevice is null", Toast.LENGTH_SHORT).show()
             }
-            Toast.makeText(this,name +"\n"+address,Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, name + "\n" + address, Toast.LENGTH_SHORT).show()
         }
 
         //connect to the device
         lifecycleScope.launch(Dispatchers.IO) {
-            if(apnaServerSocket != null){
+            if (apnaServerSocket != null) {
                 apnaServerSocket!!.close()
             }
             apnaSocket?.close()
             bluetoothAdapter?.cancelDiscovery()
 
             btDevice?.let {
-                apnaSocket = it.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
+                apnaSocket =
+                    it.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
                 try {
                     apnaSocket?.connect()
                     Log.d("Log", apnaSocket.toString())
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ECGHome,"Connected to ${apnaSocket?.remoteDevice?.name} \n ${apnaSocket.toString()}",Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this@ECGHome,
+                            "Connected to ${apnaSocket?.remoteDevice?.name} \n ${apnaSocket.toString()}",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
-                }
-                catch(e: IOException) {
+                } catch (e: IOException) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@ECGHome, e.message, Toast.LENGTH_SHORT).show()
                     }
                 }
 
-                inStream =apnaSocket?.inputStream
-                outStream=apnaSocket?.outputStream
+                inStream = apnaSocket?.inputStream
+                outStream = apnaSocket?.outputStream
 
-                try{
+                try {
                     outStream?.write(0)
-                    if(outStream==null){
-                        Log.d(TAG,"outStream is null")
+                    if (outStream == null) {
+                        Log.d(TAG, "outStream is null")
                     }
-                }
-                catch (e: IOException) {
+                } catch (e: IOException) {
                     Log.e(TAG, "Error occurred when sending data", e)
                 }
 
-                val reader = BufferedReader(InputStreamReader(inStream))
+                val reader = BufferedReader(InputStreamReader(inStream), 8000*1024)
                 var beforeLoopTime = System.currentTimeMillis()
-                var count = 0
                 rec = true
-                while (true) {
-                    try{
-                        currStr = reader.readLine()
-                        withContext(Dispatchers.Main) {
-                            val idxComma = currStr.indexOf(',')
-                            val timeStr:String = try{
-                                currStr.substring( IntRange(0, idxComma -1)  )
-                            } catch (e : StringIndexOutOfBoundsException){
-                                "-1"
-                            }
-                            val hrStr:String = try {
-                                currStr.substring(IntRange(idxComma + 1, currStr.length - 1))
-                            } catch (e : java.lang.Exception){
-                                "-1"
-                            }
-                            ECGDataList.add( hrStr.toInt() )
-                            timeStampList.add( timeStr.toLong())
-                        }
-                    }
-                    catch(e: java.lang.NumberFormatException){}
-                    catch (e: IOException) {
-                        Log.d(TAG, "Input stream was disconnected", e)
-                        withContext(Dispatchers.Main){
-                            Toast.makeText(this@ECGHome,e.message, Toast.LENGTH_LONG).show()
-                        }
-                        break
-                    }
-                    if(System.currentTimeMillis() - beforeLoopTime >= 60000){
-                        //don't put beforeLoopTime inside try catch block
-                        //don't fix it if it ain't broke
-                        beforeLoopTime = System.currentTimeMillis()
+                val folder =
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                try {
+                    val fileName1 = "HR_${
+                        SimpleDateFormat(" yyyy-MM-dd-HHmmssSSS", Locale.US)
+                            .format(beforeLoopTime)
+                    }.txt"
+                    val file1 = File(folder, fileName1)
+                    val fos1 = FileOutputStream(file1, true)
+
+                    val fileName2 = "Time_${
+                        SimpleDateFormat(" yyyy-MM-dd-HHmmssSSS", Locale.US)
+                            .format(beforeLoopTime)
+                    }.txt"
+                    val file2 = File(folder, fileName2)
+                    val fos2 = FileOutputStream(file2, true)
+
+                    var prevTime = 0.toLong()
+                    while (true) {
                         try {
-                            //file storage snippet
-                            lifecycleScope.launch(Dispatchers.Default) {
+                            currStr = reader.readLine()
+                            withContext(Dispatchers.Main) {
+                                val idxComma = currStr.indexOf(',')
+                                val timeStr = try {
+                                    currStr.substring(IntRange(0, idxComma - 1))
+                                } catch (e: StringIndexOutOfBoundsException) {
+                                    "-1"
+                                }
+                                val hrStr: String = try {
+                                    currStr.substring(IntRange(idxComma + 1, currStr.length - 1))
+                                } catch (e: java.lang.Exception) {
+                                    "-1"
+                                }
 
-
-                                    val ecgData = ECGDataList.toString()
-                                    val times = timeStampList.toString()
-                                    val data = "$ecgData \n \n $times"
-                                    val folder =
-                                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                                    val fileName = SimpleDateFormat("yyyy-MM-dd-HHmmssSSS", Locale.US)
-                                        .format(System.currentTimeMillis()).plus(".txt")
-                                    val file = File(folder, fileName)
-                                    val fos = FileOutputStream(file)
-                                    fos.write(data.toByteArray())
-
-                                    runOnUiThread {
-                                        Toast.makeText(
-                                            this@ECGHome,
-                                            "CSV File saved successfully at $folder",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                try {
+                                    fos1.write("${hrStr.toInt()}, ".toByteArray() )
+                                    try{
+                                        fos2.write("${timeStr.toLong()}, ".toByteArray())
+                                        prevTime = timeStr.toLong()
                                     }
-
-                                    ECGDataList.clear()
-                                    timeStampList.clear()
-                                    count++
-
+                                    catch (e: java.lang.NumberFormatException){
+                                        fos2.write("-1, ".toByteArray())
+                                    }
+                                }
+                                catch (e: java.lang.NumberFormatException) {
+                                    Log.d("Bad number : ", hrStr)
+                                }
                             }
-
-                        }
-                        catch(e: Exception){
-                            lifecycleScope.launch {
-                                Toast.makeText(this@ECGHome,"Unable to export file, $e", Toast.LENGTH_SHORT).show()
+                        }  catch (e: IOException) {
+                            Log.d(TAG, "Input stream was disconnected", e)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@ECGHome, e.message, Toast.LENGTH_LONG).show()
                             }
+                            break
                         }
-
+                        if (!rec) {
+                            runOnUiThread{
+                                Toast.makeText(
+                                    baseContext,
+                                    "File saved at $folder",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            break
+                        }
                     }
-                    if( count >= 5){
-                        break
-                    }
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        this@ECGHome,
+                        "Unable to export file, $e",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
 
-                try{
+                try {
                     outStream?.write(0)
-                    if(outStream==null){
-                        Log.d(TAG,"outStream is null")
+                    if (outStream == null) {
+                        Log.d(TAG, "outStream is null")
                     } else {
                     }
-                }
-                catch (e: IOException) {
+                } catch (e: IOException) {
                     Log.e(TAG, "Error occurred when sending data", e)
                 }
             }
-            if( btDevice == null){
-                withContext(Dispatchers.Main){
-                    Toast.makeText(this@ECGHome,"No Bluetooth Device Selected", Toast.LENGTH_SHORT).show()
+            if (btDevice == null) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ECGHome, "No Bluetooth Device Selected", Toast.LENGTH_SHORT)
+                        .show()
                 }
             }
         }
@@ -245,24 +247,24 @@ class ECGHome : AppCompatActivity() {
     }
 
 
-
     private val requestPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
         )
         {
 
-            if( (it[Manifest.permission.BLUETOOTH] == false
+            if ((it[Manifest.permission.BLUETOOTH] == false
                         &&
                         (it[Manifest.permission.BLUETOOTH_CONNECT] == false
-                                || it[Manifest.permission.BLUETOOTH_ADVERTISE]==false
-                                ||it[Manifest.permission.BLUETOOTH_SCAN]==false))
-                || (it[Manifest.permission.ACCESS_COARSE_LOCATION] ==false && it[Manifest.permission.ACCESS_FINE_LOCATION] ==false)){
-                Toast.makeText(this,"Please provide required permissions", Toast.LENGTH_SHORT).show()
+                                || it[Manifest.permission.BLUETOOTH_ADVERTISE] == false
+                                || it[Manifest.permission.BLUETOOTH_SCAN] == false))
+                || (it[Manifest.permission.ACCESS_COARSE_LOCATION] == false && it[Manifest.permission.ACCESS_FINE_LOCATION] == false)
+            ) {
+                Toast.makeText(this, "Please provide required permissions", Toast.LENGTH_SHORT)
+                    .show()
                 finish()
-            }
-            else{
-                Toast.makeText(this,"Permissions granted successfully", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Permissions granted successfully", Toast.LENGTH_SHORT).show()
                 bluetoothAdapter?.enable()
             }
         }
