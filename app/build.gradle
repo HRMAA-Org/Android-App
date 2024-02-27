@@ -29,6 +29,14 @@ android {
                 install "heartpy"
             }
         }
+        ndk {
+            abiFilters "armeabi-v7a"
+        }
+    }
+    sourceSets {
+        main {
+            python.srcDir "python"
+        }
     }
 
     buildTypes {

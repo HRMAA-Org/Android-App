@@ -13,6 +13,7 @@ import com.devsoc.hrmaa.databinding.ActivityMainBinding
 import com.devsoc.hrmaa.fitbit.FitbitActivity
 import com.devsoc.hrmaa.healthConnect.HealthConnectActivity
 import com.devsoc.hrmaa.ppg.PPGActivity
+import com.devsoc.hrmaa.wlan.ECGActivity
 
 
 class MainActivity : AppCompatActivity() {
@@ -41,9 +42,8 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, PPGActivity::class.java))
         }
         binding.ecgCvMa.setOnClickListener{
-            startActivity(Intent(this, ECGHome::class.java))
+            startActivity(Intent(this, ECGActivity::class.java))
         }
-
 
     }
 
