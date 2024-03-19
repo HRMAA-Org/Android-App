@@ -1,6 +1,7 @@
 package com.devsoc.hrmaa
 
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -42,7 +43,16 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, PPGActivity::class.java))
         }
         binding.ecgCvMa.setOnClickListener{
-            startActivity(Intent(this, ECGActivity::class.java))
+            val consentDialog = AlertDialog.Builder(this)
+                .setTitle("DISCLAIMER")
+                .setMessage(" By using this heart rate monitoring and analysis application, you confirm your good health, full consciousness, and consent for measurement. This app is for experimental purposes only and not for medical use. Results are for informational purposes and should not replace professional medical advice. Accuracy may vary due to device and user factors. Consult a healthcare professional for concerns.")
+                .setPositiveButton("Accept") { dialogInterface, i ->
+                    startActivity(Intent(this, ECGActivity::class.java))
+                }
+                .setNegativeButton("Deny") {_,_ ->
+                    Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
+                }
+            consentDialog.show()
         }
 
     }

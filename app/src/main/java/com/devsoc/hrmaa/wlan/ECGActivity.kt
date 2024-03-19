@@ -1,30 +1,36 @@
 package com.devsoc.hrmaa.wlan
 
 import android.Manifest
-import com.devsoc.hrmaa.R
 import android.content.Context
+import android.content.Intent
+import android.graphics.Color
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.text.format.Formatter
 import android.util.Log
-import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
-import android.widget.ProgressBar
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import androidx.lifecycle.lifecycleScope
-import com.chaquo.python.PyObject
-import com.chaquo.python.Python
+import com.devsoc.hrmaa.R
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -39,18 +45,21 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+
 private val RASPI_IP_OFFSET = 1
 
-class ECGActivity : AppCompatActivity() {
+class ECGActivity : AppCompatActivity(), InternetConnectionCallback {
     private lateinit var btn : Button
     private lateinit var etIPaddr : EditText
     private lateinit var tvServerMsg: TextView
     private lateinit var data_time: ArrayList<Long>
     private lateinit var data_read: ArrayList<Int>
     private lateinit var time_stamp: String
+    private lateinit var connection: CardView
+    private lateinit var connText: TextView
 //    private lateinit var py: Python
-//    private lateinit var module :PyObject
-    lateinit var pb:ProgressBar
+//    private lateinit var module :PyObjectF
+//    lateinit var pb:ProgressBar
     private lateinit var etTimeInt: EditText
     val EOF = "</HRMAA>"
     val folder =
@@ -77,6 +86,29 @@ class ECGActivity : AppCompatActivity() {
             Manifest.permission.READ_EXTERNAL_STORAGE,
         )
 
+    override fun onDestroy() {
+        super.onDestroy()
+        InternetConnectionObserver.unRegister()
+    }
+
+    override fun onConnected() {
+        runOnUiThread {
+            connection.setCardBackgroundColor(Color.GREEN)
+            connText.text = "Connected"
+            Toast.makeText(this, "Internet Connection Resume", Toast.LENGTH_SHORT).show()
+        }
+        Log.d("Internet", "connected")
+    }
+
+    override fun onDisconnected() {
+        runOnUiThread {
+            connection.setCardBackgroundColor(Color.RED)
+            connText.text = "Not Connected"
+            Toast.makeText(this, "Internet Connection Lost", Toast.LENGTH_SHORT).show()
+        }
+        Log.d("Internet", "disconnected")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_ecgactivity)
@@ -89,15 +121,38 @@ class ECGActivity : AppCompatActivity() {
 
         btn = findViewById(R.id.btn)
         etIPaddr = findViewById(R.id.etIPAdress)
-        pb = findViewById(R.id.pbLoading)
+//        pb = findViewById(R.id.pbLoading)
         data_time = arrayListOf()
         data_read = arrayListOf()
         etTimeInt = findViewById(R.id.etTimeInterval)
+        val gender = findViewById<Spinner>(R.id.gender_spin_ea)
+        val act = findViewById<Spinner>(R.id.act_spin_ea)
+        val genderAdapter = ArrayAdapter.createFromResource(this, R.array.gender, android.R.layout.simple_spinner_item)
+        genderAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        gender.adapter = genderAdapter
+        val actAdapter = ArrayAdapter.createFromResource(this, R.array.activity, android.R.layout.simple_spinner_item)
+        actAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        act.adapter = actAdapter
 
-        pb.visibility = View.INVISIBLE
+//        InternetConnectionObserver
+//            .instance(this)
+//            .setCallback(this)
+//            .register()
+
+        connection = findViewById<CardView>(R.id.connection_cv_ea)
+        connText = findViewById<TextView>(R.id.conn_tv_ea)
+        val connectivityManager =
+            this.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        if(connectivityManager.activeNetworkInfo?.isConnected == true){
+            connection.setCardBackgroundColor(Color.GREEN)
+            connText.text = "Connected"
+        }
+
+
+//        pb.visibility = View.INVISIBLE
 
         if( !isNetworkAvailable()){
-            etIPaddr.setText("Network unavailable")
+
         }
 
         val graphView = findViewById<GraphView>(R.id.ecg_gv_egf)
@@ -144,13 +199,34 @@ class ECGActivity : AppCompatActivity() {
 
         btn.setOnClickListener {
             //can't run IO calls in main thread because of os.network rules
-
             lifecycleScope.launch(Dispatchers.IO) {
 
-                val fileName1 = "HR_${
+                val name = findViewById<EditText>(R.id.name_tie_ea).text
+                val age = findViewById<EditText>(R.id.age_tie_ea).text
+                val gender = findViewById<Spinner>(R.id.gender_spin_ea).selectedItem.toString()
+                val activity = findViewById<Spinner>(R.id.act_spin_ea).selectedItem.toString()
+                var act = "1"
+                if(activity.equals("Resting")){
+                    act = "1"
+                }
+                if(activity.equals("Walking")){
+                    act = "1"
+                }
+                if(activity.equals("Pacing")){
+                    act = "1"
+                }
+                if(activity.equals("Climbing Stairs")){
+                    act = "1"
+                }
+
+
+                var fileName1 = "HR_${name}_${age}_${gender}_${act}_${
                     SimpleDateFormat(" yyyy-MM - dd - HH_mm_ss", Locale.US)
                         .format(System.currentTimeMillis())
                 }.txt"
+//                Log.d("Filename", "HR_${name}_${age}_${gender}_$act")
+//                fileName1 = "HR_${name}_${age}_${gender}_$act"
+
                 val file1 = File(folder, fileName1)
                 val fileBuffWrit =  FileOutputStream(file1, true).bufferedWriter()
 
@@ -177,10 +253,10 @@ class ECGActivity : AppCompatActivity() {
                     buffWrit.flush()
 
                     receiveForTime( buffRead, fileBuffWrit, time ,"One off", "All in smoke" )
-
                     buffWrit.write(getCommandJSON("stop", time, "One off", Date().time.toString()).toString())
                     buffWrit.flush()
-
+                    val toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+                    toneGenerator.startTone(ToneGenerator.TONE_CDMA_PIP, 2000)
                     buffRead.close()
                     buffWrit.close()
                     clientSocket.close()
@@ -188,7 +264,7 @@ class ECGActivity : AppCompatActivity() {
 
                     this@ECGActivity.runOnUiThread(Runnable {
                         Toast.makeText(this@ECGActivity, "Done with transmission, new file ${fileName1} created", Toast.LENGTH_LONG).show()
-                        pb.visibility =View.INVISIBLE
+//                        pb.visibility =View.INVISIBLE
                     })
                     Log.d("readSuccessful","Read success")
                 }
@@ -197,6 +273,11 @@ class ECGActivity : AppCompatActivity() {
                 }
             }
 
+        }
+
+        findViewById<Button>(R.id.sendData).setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://docs.google.com/forms/d/e/1FAIpQLSckn4FL86qYmaHa6Odko-nqca86k9BSAllGOblaFQfQ52qJvA/viewform?usp=sf_link"))
+            startActivity(intent)
         }
     }
 

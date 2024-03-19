@@ -43,4 +43,14 @@
     <string name="get_authorized">Get authorized</string>
     <string name="no_code_found">No code found</string>
     <string name="login">Login again</string>
+    <string-array name="gender">
+        <item>Male</item>
+        <item>Female</item>
+    </string-array>
+    <string-array name="activity">
+        <item>Resting</item>
+        <item>Walking</item>
+        <item>Pacing</item>
+        <item>Climbing Stairs</item>
+    </string-array>
 </resources>
